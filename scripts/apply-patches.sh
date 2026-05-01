@@ -88,7 +88,7 @@ apply_series() {
     local sentinel
     sentinel=$(mktemp "${KERNEL_SRC}/.lqxm_sentinel_XXXXXX")
 
-    if ! patch -p1 --forward -d "${KERNEL_SRC}" < "${patch_path}" 2>/dev/null; then
+    if ! patch -p1 --forward --ignore-whitespace --fuzz=3 -d "${KERNEL_SRC}" < "${patch_path}" 2>/dev/null; then
       # Check for .rej files newer than our sentinel (genuine conflict)
       local new_rejects
       new_rejects=$(find "${KERNEL_SRC}" -name '*.rej' -newer "${sentinel}" 2>/dev/null)
