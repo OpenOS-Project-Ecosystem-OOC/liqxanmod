@@ -77,7 +77,12 @@ apply_series() {
       local tree_series
       tree_series=$(make -s -C "${KERNEL_SRC}" kernelversion 2>/dev/null \
         | grep -oE '^[0-9]+\.[0-9]+' || true)
-      if [[ -n "${tree_series}" && "${patch_series}" == "${tree_series}" ]]; then
+      # Skip if the tree is at the same series OR newer (XanMod 7.x already
+      # contains all stable commits from 6.x Liquorix zen patches).
+      local newer
+      newer=$(printf '%s\n%s\n' "${patch_series}" "${tree_series}" \
+        | sort -V | tail -1)
+      if [[ -n "${tree_series}" && ( "${patch_series}" == "${tree_series}" || "${newer}" == "${tree_series}" ) ]]; then
         log WARN "zen stable-backport patch for ${patch_series} already in XanMod tree — skipping: ${line}"
         (( skipped++ )) || true
         continue
