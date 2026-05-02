@@ -77,7 +77,8 @@ apply_series() {
       local tree_series
       tree_series=$(make -s -C "${KERNEL_SRC}" kernelversion 2>/dev/null \
         | grep -oE '^[0-9]+\.[0-9]+' || true)
-      if [[ -n "${tree_series}" && "${patch_series}" == "${tree_series}" ]]; then
+      if [[ -n "${tree_series}" ]] && \
+         [[ "$(printf '%s\n' "${patch_series}" "${tree_series}" | sort -V | head -1)" == "${patch_series}" ]]; then
         log WARN "zen stable-backport patch for ${patch_series} already in XanMod tree — skipping: ${line}"
         (( skipped++ )) || true
         continue
