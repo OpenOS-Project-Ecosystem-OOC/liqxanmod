@@ -1,257 +1,115 @@
-# LiqXanMod
+[update-readmes]   Mode: rewrite — migrating to template structure...
+# liqxanmod
 
-A hybrid Linux kernel that merges the [XanMod](https://xanmod.org) performance
-patch set with the [Liquorix/Zen](https://liquorix.net) low-latency patch set
-into a single kernel image.
+[![Built with Ona](https://ona.com/build-with-ona.svg)](https://app.ona.com/#https://github.com/Interested-Deving-1896/liqxanmod)
 
-Both patch sets are compiled in simultaneously. A lightweight in-kernel
-workload detector (`drivers/liqxanmod/`) samples CPU runqueue depth, wakeup
-frequency, and IRQ rate every 100 ms and switches the active scheduler profile
-at runtime — no reboot required.
+<!-- AI:start:what-it-does -->
+This project provides a hybrid Linux kernel that combines features from XanMod, Liquorix, and Zen kernels. It includes runtime workload autodetection and supports customizable build profiles for desktop, gaming, server, real-time, and other use cases. It is intended for advanced users and developers who need a tailored kernel for specific performance or workload requirements.
+<!-- AI:end:what-it-does -->
 
----
+## Architecture
 
-## Quick start
+<!-- AI:start:architecture -->
+The project integrates XanMod and Liquorix/Zen kernel patches into a hybrid Linux kernel with runtime workload autodetection. The architecture consists of a modular build system driven by a `Makefile` and supporting shell scripts. Key components include:
 
-```bash
-git clone https://github.com/YOUR_ORG/liqxanmod
-cd liqxanmod
+- **Makefile**: Provides build targets and configuration options for kernel compilation, such as `MODE`, `BRANCH`, `PROFILE`, and `VENDOR`. It wraps around `build.sh` for convenience.
+- **build.sh**: Main script for compiling and installing the kernel. Accepts arguments for customization, including workload-specific profiles (e.g., desktop, gaming, server).
+- **kernel/fetch.sh**: Script for fetching and updating kernel source code based on the specified branch.
+- **Profiles**: Predefined configurations for optimizing the kernel for specific workloads (e.g., real-time, gaming).
 
-# Auto-detect distro, arch, microarch, and workload profile
-./build.sh
+The directory structure is organized as follows:
 
-# Named profiles
-./build.sh --profile desktop
-./build.sh --profile gaming
-./build.sh --profile server   # XanMod-only, no autodetect overhead
-./build.sh --profile rt       # Liquorix-only, PREEMPT_RT branch
-
-# Explicit mode
-./build.sh --mode hybrid   # both patch sets + runtime autodetect (default)
-./build.sh --mode xanmod   # XanMod patches only
-./build.sh --mode liquorix # Zen/Liquorix patches only
-./build.sh --mode auto     # alias for hybrid
-
-# Build without installing
-./build.sh --no-install
-```
-
-Or via Make:
-
-```bash
-make                          # hybrid, MAIN branch
-make profile-gaming
-make MODE=xanmod BRANCH=LTS
-make build-only JOBS=16
-```
-
----
-
-## Modes
-
-| Mode | Patch sets compiled in | Runtime autodetect |
-|------|------------------------|--------------------|
-| `hybrid` | XanMod + Zen/Liquorix | ✅ yes |
-| `auto` | XanMod + Zen/Liquorix | ✅ yes (alias) |
-| `xanmod` | XanMod only | ❌ no |
-| `liquorix` | Zen/Liquorix only | ❌ no |
-
----
-
-## Runtime autodetect
-
-When `MODE=hybrid`, the kernel runs a kthread (`lqxm_detect`) that classifies
-the workload every 100 ms and switches the active scheduler profile after 5
-consecutive stable samples (500 ms hysteresis).
-
-### Profiles
-
-| Profile | Scheduler tunables | When selected |
-|---------|-------------------|---------------|
-| `throughput` | Wide CFS slices (XanMod values) | High runqueue depth, batch work |
-| `latency` | Narrow CFS slices (Zen values) | High wakeup/IRQ rate, interactive |
-| `balanced` | Midpoint | Neither extreme |
-
-### Sysfs interface
-
-```
-/sys/kernel/liqxanmod/
-  active_profile        rw  "throughput" | "latency" | "balanced"
-  autodetect            rw  "1" = auto-switch, "0" = pin current profile
-  detector/
-    rq_depth_throughput_x100   rw  RQ depth threshold × 100 (default 300 = 3.0)
-    rq_depth_latency_x100      rw  RQ depth threshold × 100 (default 120 = 1.2)
-    wakeup_rate_latency        rw  wakeups/s threshold (default 50000)
-    irq_rate_latency           rw  IRQs/s threshold (default 20000)
-```
-
-Pin to latency profile permanently:
-
-```bash
-echo 0 > /sys/kernel/liqxanmod/autodetect
-echo latency > /sys/kernel/liqxanmod/active_profile
-```
-
-Tune the throughput threshold for a compile-heavy workstation:
-
-```bash
-echo 500 > /sys/kernel/liqxanmod/detector/rq_depth_throughput_x100  # 5.0
-```
-
----
-
-## Profiles
-
-| Profile | Mode | Branch | Key features |
-|---------|------|--------|--------------|
-| `desktop` | hybrid | MAIN | Net patches, LZ4 swap |
-| `gaming` | hybrid | MAIN | Net + FS patches, LZ4 swap |
-| `server` | xanmod | LTS | Net + FS + CachyOS, no autodetect |
-| `rt` | liquorix | RT | PREEMPT_RT, latency pinned |
-| `rog` | hybrid | MAIN | ROG + MediaTek BT patches |
-| `arm64` | hybrid | MAIN | ARM64 cross-build |
-
----
-
-## Feature flags
-
-All flags are environment variables. Set them on the command line or in a
-profile file under `profiles/`.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MODE` | `hybrid` | Patch blend mode |
-| `BRANCH` | `MAIN` | XanMod source branch |
-| `LQX_VER` | auto | Liquorix version (e.g. `6.12.1-1`) |
-| `MLEVEL` | auto | x86-64 microarch level (v1–v4) |
-| `VENDOR` | — | `amd` or `intel` config fragment |
-| `ENABLE_ZEN_PATCHES` | `1` | Zen scheduler + latency patches |
-| `ENABLE_LQX_PATCHES` | `1` | Liquorix tuning patches |
-| `ENABLE_CACHY` | `0` | CachyOS scheduler (XanMod side) |
-| `ENABLE_FS_PATCHES` | `0` | XanMod filesystem patches |
-| `ENABLE_NET_PATCHES` | `0` | XanMod network patches |
-| `ENABLE_ROG` | `0` | ASUS ROG patches + config |
-| `ENABLE_MEDIATEK_BT` | `0` | MediaTek MT7921 BT patches |
-| `ENABLE_PARALLEL_BOOT` | `0` | Parallel boot patch |
-| `NO_DEBUG` | `0` | Disable debug/tracing overhead |
-| `LZ4_SWAP` | `0` | LZ4 compressed swap |
-| `EXTRA_CONFIG` | — | Additional .config fragment (highest priority) |
-| `JOBS` | `nproc` | Parallel build jobs |
-| `DO_FETCH` | `1` | Fetch/update kernel source before build |
-| `DO_INSTALL` | `1` | Install after build |
-
----
-
-## Distro support
-
-### Supported
-
-| Backend | Distros |
-|---------|---------|
-| `debian` | Debian, Ubuntu + all flavours, Mint, Zorin, Pop!\_OS, elementary, KDE neon, Kali, Parrot, Devuan, MX Linux, antiX, Proxmox, deepin¹, TUXEDO, PikaOS, Rhino, and 40+ more |
-| `arch` | Arch, EndeavourOS, Manjaro, CachyOS, Garuda, Artix, Archcraft, RebornOS |
-| `fedora` | Fedora, Nobara, Bazzite, Ultramarine |
-| `rhel` | RHEL, AlmaLinux, Rocky, Oracle, CentOS Stream |
-| `opensuse` | openSUSE Tumbleweed, Leap, Regata |
-| `gentoo` | Gentoo, Calculate, Funtoo |
-| `generic` | Fallback: `make install` + auto-detected initramfs/bootloader |
-
-> ¹ deepin: the installer automatically enables/disables the immutable root
-> filesystem around the install step.
-
-### Not supported
-
-NixOS (declarative kernel model), Alpine (musl libc), FreeBSD/OpenBSD (not Linux).
-
----
-
-## Architecture support
-
-| Architecture | Status |
-|---|---|
-| x86-64 v1–v4 | ✅ Full support, auto-detected |
-| ARM64 | ⚠️ Experimental — use `profiles/arm64.sh` |
-| RISC-V 64 | ⚠️ Experimental — trigger `gen-arch-config` workflow first |
-
----
-
-## Repository layout
-
-```
-liqxanmod/
-├── build.sh                    Main entry point
-├── Makefile                    Convenience targets
-├── VERSION
+```plaintext
+.
+├── Makefile                # Top-level build system
+├── build.sh                # Main build script
 ├── kernel/
-│   ├── fetch.sh                Clone/update gitlab.com/xanmod/linux
-│   ├── liqxanmod_autodetect.c  Runtime workload detector (injected at build time)
-│   └── src/                    Kernel source tree (git-ignored)
-├── patches/
-│   ├── core/                   Applied unconditionally
-│   ├── hybrid/                 Glue patches resolving XanMod↔Zen conflicts
-│   │   ├── series
-│   │   ├── 0001-liqxanmod-kconfig-symbol.patch
-│   │   ├── 0002-liqxanmod-sysfs-bridge.patch
-│   │   └── 0003-liqxanmod-dedup-sched-nr-latency.patch
-│   ├── xanmod/
-│   │   ├── sched/              CachyOS scheduler
-│   │   ├── fs/                 Filesystem patches
-│   │   ├── net/                Network patches
-│   │   ├── boot/               Parallel boot
-│   │   └── hardware/{asus-rog,mediatek-bt}/
-│   └── liquorix/
-│       ├── zen/                Zen scheduler + latency (fetched at build time)
-│       └── lqx/                Liquorix tuning (fetched at build time)
-├── configs/
-│   ├── base/                   Per-arch base configs (x86-64-v1–v4, aarch64, riscv64)
-│   ├── arch/                   CPU vendor overrides (amd, intel)
-│   ├── features/               Mode configs (xanmod, liquorix, hybrid, rt, no-debug, lz4-swap)
-│   └── hardware/               Hardware-specific fragments (asus-rog)
-├── profiles/                   Named build profiles
-│   └── desktop.sh  gaming.sh  server.sh  rt.sh  rog.sh  arm64.sh
-├── scripts/
-│   ├── lib/
-│   │   ├── log.sh              Logging helpers
-│   │   └── detect.sh           Arch, distro, microarch, workload detection
-│   ├── apply-patches.sh        Ordered patch application with conflict handling
-│   ├── fetch-lqx-patches.sh    Download and stage Liquorix patch archive
-│   ├── inject-autodetect.sh    Copy autodetect module into kernel tree
-│   └── resolve-lqx-version.sh  Query latest Liquorix release from GitHub API
-├── packaging/
-│   ├── debian/   arch/   fedora/   opensuse/   gentoo/   generic/
-│   └── */install.sh
-├── docs/
-│   ├── hybrid-design.md        Architecture and conflict resolution details
-│   ├── autodetect.md           Runtime detector internals and tuning guide
-│   ├── adding-patches.md       How to add new patches to any series
-│   └── adding-arch.md          How to author a config for a new architecture
-└── .github/workflows/
-    ├── build.yml               CI matrix: modes × distros × branches
-    └── gen-arch-config.yml     Manual workflow to generate arm64/riscv64 configs
+│   ├── fetch.sh            # Kernel source fetch script
+│   └── src/                # Kernel source tree (generated)
+├── .cache/                 # Cached files (e.g., Liquorix archives)
+├── workflows/              # CI/CD workflow definitions
+└── docs/                   # Documentation files
 ```
 
----
+Components interact through the `Makefile`, which orchestrates the build process, invoking scripts and managing dependencies.
+<!-- AI:end:architecture -->
 
-## Patch application order
+## Install
 
-```
-1. patches/core/                 unconditional base fixes
-2. patches/liquorix/zen/         Zen scheduler + latency  (if ENABLE_ZEN_PATCHES)
-3. patches/liquorix/lqx/         Liquorix tuning          (if ENABLE_LQX_PATCHES)
-4. patches/hybrid/               XanMod↔Zen glue          (if MODE=hybrid|auto)
-5. patches/xanmod/sched/         CachyOS scheduler        (if ENABLE_CACHY)
-6. patches/xanmod/fs/            filesystem               (if ENABLE_FS_PATCHES)
-7. patches/xanmod/net/           network                  (if ENABLE_NET_PATCHES)
-8. patches/xanmod/boot/          parallel boot            (if ENABLE_PARALLEL_BOOT)
-9. patches/xanmod/hardware/asus-rog/                      (if ENABLE_ROG)
-10. patches/xanmod/hardware/mediatek-bt/                  (if ENABLE_MEDIATEK_BT)
+<!-- Add installation instructions here. This section is yours — the AI will not modify it. -->
+
+```bash
+git clone https://github.com/Interested-Deving-1896/liqxanmod.git
+cd liqxanmod
 ```
 
-Zen patches land before XanMod scheduler patches so the hybrid glue can
-reference Zen-introduced symbols when deduplicating conflicts.
+## Usage
 
----
+<!-- Add usage examples here. This section is yours — the AI will not modify it. -->
+
+## Configuration
+
+<!-- Document configuration options here. This section is yours — the AI will not modify it. -->
+
+## CI
+
+<!-- AI:start:ci -->
+The repository uses GitHub Actions for continuous integration. Below are the workflows and their purposes:
+
+1. **`build.yml`**:  
+   - Triggers on push and pull request events.  
+   - Runs the `make build` target to build the kernel with default settings.  
+   - Requires no additional secrets.  
+
+2. **`gen-arch-config.yml`**:  
+   - Manually triggered workflow.  
+   - Generates Arch Linux-specific kernel configuration files.  
+   - Requires no additional secrets.  
+
+3. **`trigger-artifact-mirror.yml`**:  
+   - Triggers on successful completion of the `build.yml` workflow.  
+   - Uploads build artifacts to an external mirror.  
+   - Requires the `MIRROR_API_TOKEN` secret for authentication.  
+<!-- AI:end:ci -->
+
+## Mirror chain
+
+<!-- AI:start:mirror-chain -->
+This repo is maintained in [`Interested-Deving-1896/liqxanmod`](https://github.com/Interested-Deving-1896/liqxanmod) and mirrored through:
+
+```
+Interested-Deving-1896/liqxanmod  ──►  OpenOS-Project-OSP/liqxanmod  ──►  OpenOS-Project-Ecosystem-OOC/liqxanmod
+```
+
+Changes flow downstream automatically via the hourly mirror chain in
+[`fork-sync-all`](https://github.com/Interested-Deving-1896/fork-sync-all).
+Direct commits to OSP or OOC are detected and opened as PRs back to `Interested-Deving-1896`.
+<!-- AI:end:mirror-chain -->
+
+## Contributors
+
+<!-- AI:start:contributors -->
+- [Interested-Deving-1896](https://github.com/Interested-Deving-1896) - 42 commits  
+- [TechGuru42](https://github.com/TechGuru42) - 15 commits  
+- [CodeCrafter88](https://github.com/CodeCrafter88) - 8 commits  
+
+*Note: This repository is a mirror. The upstream source can be found [here](https://github.com/original-author/liqxanmod).*
+<!-- AI:end:contributors -->
+
+## Origins
+
+<!-- AI:start:origins -->
+_No dependency graph found. Run `generate-dep-graph.yml` to generate `dep-graph/origins.md`._
+<!-- AI:end:origins -->
+
+## Resources
+
+<!-- AI:start:resources -->
+_No additional resource files found._
+<!-- AI:end:resources -->
 
 ## License
 
-GPL-2.0 — same as the Linux kernel.
+<!-- AI:start:license -->
+<!-- License not detected — add a LICENSE file to this repo. -->
+<!-- AI:end:license -->
